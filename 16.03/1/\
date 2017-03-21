@@ -1,0 +1,37 @@
+#include <iostream>
+#include <fstream>
+#include <stdlib.h>
+#include "mpi.h"
+
+int main (int argc, char *argv[]){
+	
+	int rank, size;
+	MPI_Init(&argc, &argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	if (rank == 0){
+	std::ifstream myFile;
+	myFile.open("../AR/v01.dat");
+	char line[256], curVal[8];
+	myFile.getline(line, 256);
+	for (int i = 0 ; line[i] != 0 ; i++){
+		int c = 0;
+		if (line[i] != 0 && line[i] != 32){
+			std::cout << line[i] << "\n";
+			curVal[c++] = line[i];
+			if (line[i+1] == 0 || line[i+1] == 32){
+				//float f = atof(curVal);
+				//std::cout << f << "\n";
+				std::cout << curVal << "\n";
+			}
+		}
+	}
+
+	}
+	
+	
+
+	MPI_Finalize();
+
+}
