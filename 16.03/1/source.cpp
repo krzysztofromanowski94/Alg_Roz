@@ -1,9 +1,6 @@
-#include <iostream>
 #include <fstream>
-#include <stdlib.h>
 #include <algorithm>
 #include <math.h>
-#include <cstdlib>
 #include "mpi.h"
 
 
@@ -73,6 +70,10 @@ int main (int argc, char *argv[]) {
                 }
             }
         }while (vecLeft > 0);
+
+        for (int i = 0 ; i < size ; i++){
+            printf("vectors for rank %i : %i\n", i, vecForRank[i]);
+        }
 
         int stepGate = vecForRank[rank] * 3; //value used for initialising sending start point
         for (int i = 1 ; i < size ; i++){
@@ -148,12 +149,57 @@ int main (int argc, char *argv[]) {
             printf("worldAverage[%i]: %f \n", i, worldAverage[i]);
         }
         printf("worldL: %f\n", worldL);
-        //printf("Overall time: %f\n", MPI_Wtime() - myTime);
     }
 
-    printf("rank: %i, readData: %f, processData: %f, reduceResults: %f\n", rank, timeReadData, timeProcessData, timeReduceResults);
+
+    double *readData, *processData, *reduceResults;
+    if (rank == 0 ){
+        readData = (double*)malloc(sizeof(double) * size);
+        processData = (double*)malloc(sizeof(double) * size);
+        reduceResults = (double*)malloc(sizeof(double) * size);
+    }
+
+    MPI_Gather(&timeReadData, 1, MPI_DOUBLE, readData, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(&timeProcessData, 1, MPI_DOUBLE, processData, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(&timeReduceResults, 1, MPI_DOUBLE, reduceResults, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 
+    if (rank == 0){
+        for (int i = 0 ; i < size ; i ++){
+            printf("from rank: %i, read: %f, process: %f, reduce: %f\n", i, readData[i], processData[i], reduceResults[i]);
+        }
+
+        std::ofstream myFile;
+        myFile.open("timeResults.txt");
+        double totalReadData = 0, totalProcessData = 0, totalReduceResults = 0;
+
+        for (int i = 0 ; i < size ; i++) {
+            myFile << "timings (proc " << i << "):\n";
+            myFile << "readData:\t" << readData[i] << "\n";
+            myFile << "processData:\t" << processData[i] << "\n";
+            myFile << "reduceResults:\t" << reduceResults[i] << "\n";
+            myFile << "total:\t" <<  readData[i] + processData[i] + reduceResults[i] << "\n\n";
+
+            totalReadData += readData[i];
+            totalProcessData += processData[i];
+            totalReduceResults += reduceResults[i];
+        }
+
+        myFile << "total timings:\n";
+        myFile << "readData:\t" << totalReadData << "\n";
+        myFile << "processData:\t" << totalProcessData << "\n";
+        myFile << "reduceResults:\t" << totalReduceResults << "\n";
+        myFile << "total:\t" << totalReadData + totalProcessData + totalReduceResults << "\n";
+
+        myFile.close();
+    }
+
+
+    if (rank == 0) {
+        free(readData);
+        free(processData);
+        free(reduceResults);
+    }
     MPI_Finalize();
     return 0;
 
