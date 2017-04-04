@@ -8,100 +8,106 @@
 int main (int argc, char *argv[]) {
 
     MPI_Init(&argc, &argv);
-    int rank, size, lineAmount, nodeVecAmount;
+    int rank, size, lineAmount = 0, nodeVecAmount = 0;
     float* elements;
     float average[]= {0,0,0};
     float sum, l;
     double timeTotal, timeReadData, timeProcessData, timeReduceResults;
-    int option = -1;
+    int option;// = -1;
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-//
-//    if (rank == 0)
-//    {
-//        printf("How would you like to read the file?\n0.: ifstream\n1.: MPI_File");
-//        option = getchar();
-//        printf("You choose %i\n", option);
-//    }
-//    else
-    if (rank == 0){
-        timeReadData = MPI_Wtime(); // start reading time
 
-        std::ifstream myFile;
-        myFile.open("../AR/v06.dat");
+    char filename[] = "../AR/v06.dat";
+    option = atoi(argv[1]);
 
-        lineAmount = std::count(std::istreambuf_iterator<char>(myFile),
-                                std::istreambuf_iterator<char>(), '\n');
-        printf("Amount of vectors: %i\n", lineAmount);
+    if (option == 0) {
+
+        if (rank == 0) {
+            timeReadData = MPI_Wtime(); // start reading time
+
+            std::ifstream myFile;
+            myFile.open(filename);
+
+            lineAmount = std::count(std::istreambuf_iterator<char>(myFile),
+                                    std::istreambuf_iterator<char>(), '\n');
+            printf("Amount of vectors: %i\n", lineAmount);
 
 
-        elements = (float*)malloc(sizeof(float) * lineAmount * 3);
-        int allElemIter = 0;
+            elements = (float *) malloc(sizeof(float) * lineAmount * 3);
+            int allElemIter = 0;
 
-        myFile.seekg(0, myFile.beg);
-        while(!myFile.eof()) {
-            char line[256], curVal[] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'}; //current value
-            myFile.getline(line, 256);
-            int c = 0; //helps set current char to curVal
-            int vi = 0; //temporary vector counter. It resets itself every line
-            for (int i = 0 ; line[i] != 0 ; i++) { //go through the line while any chars left
-                if (line[i] != 0 && line[i] != 32) { //if there are required characters
-                    curVal[c++] = line[i];
-                    if (line[i+1] == 0 || line[i+1] == 32) { //if next char in line is a whitespace
-                        elements[allElemIter++] = atof(curVal);
-                        c = 0; //reset current char iterator
-                        for (int j = 0 ; j < 8 ; j++) //reset current value to be clean for next reading
-                            curVal[j] = '\0';
+            myFile.seekg(0, myFile.beg);
+            while (!myFile.eof()) {
+                char line[256], curVal[] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'}; //current value
+                myFile.getline(line, 256);
+                int c = 0; //helps set current char to curVal
+                int vi = 0; //temporary vector counter. It resets itself every line
+                for (int i = 0; line[i] != 0; i++) { //go through the line while any chars left
+                    if (line[i] != 0 && line[i] != 32) { //if there are required characters
+                        curVal[c++] = line[i];
+                        if (line[i + 1] == 0 || line[i + 1] == 32) { //if next char in line is a whitespace
+                            elements[allElemIter++] = atof(curVal);
+                            c = 0; //reset current char iterator
+                            for (int j = 0; j < 8; j++) //reset current value to be clean for next reading
+                                curVal[j] = '\0';
+                        }
                     }
                 }
             }
-        }
-        myFile.close();
+            myFile.close();
 
-        int* vecForRank = (int*)calloc(size, sizeof(int));
-        int vecLeft = lineAmount; //will use this value to recognise how many vectors are left
-        div_t tempDiv; //for counting left vectors
-        do{
-            tempDiv = div(vecLeft, size); //amount of vectors for each processor
-            for (int i = 0 ; i < size ; i++){
-                vecForRank[i] += tempDiv.quot;
-            }
-            vecLeft = tempDiv.rem; //update left vectors
-            if (tempDiv.rem > size)
-                vecLeft = tempDiv.rem;
-            else {
-                int ti = 0; //temporary iterator
-                while (vecLeft > 0){
-                    vecForRank[(ti++) % size]++;
-                    vecLeft--; //add 1 to each node until no vectors left
+            int *vecForRank = (int *) calloc(size, sizeof(int));
+            int vecLeft = lineAmount; //will use this value to recognise how many vectors are left
+            div_t tempDiv; //for counting left vectors
+            do {
+                tempDiv = div(vecLeft, size); //amount of vectors for each processor
+                for (int i = 0; i < size; i++) {
+                    vecForRank[i] += tempDiv.quot;
                 }
+                vecLeft = tempDiv.rem; //update left vectors
+                if (tempDiv.rem > size)
+                    vecLeft = tempDiv.rem;
+                else {
+                    int ti = 0; //temporary iterator
+                    while (vecLeft > 0) {
+                        vecForRank[(ti++) % size]++;
+                        vecLeft--; //add 1 to each node until no vectors left
+                    }
+                }
+            } while (vecLeft > 0);
+
+            for (int i = 0; i < size; i++) {
+                printf("vectors for rank %i : %i\n", i, vecForRank[i]);
             }
-        }while (vecLeft > 0);
 
-        for (int i = 0 ; i < size ; i++){
-            printf("vectors for rank %i : %i\n", i, vecForRank[i]);
+            int stepGate = vecForRank[rank] * 3; //value used for initialising sending start point
+            for (int i = 1; i < size; i++) {
+                MPI_Send(&(vecForRank[i]), 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+                MPI_Send(elements + stepGate, vecForRank[i] * 3, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+                stepGate += vecForRank[i] * 3;
+            }
+
+            nodeVecAmount = vecForRank[rank];
+            free(vecForRank);
+            timeReadData = MPI_Wtime() - timeReadData; // end of reading and spreading data
         }
 
-        int stepGate = vecForRank[rank] * 3; //value used for initialising sending start point
-        for (int i = 1 ; i < size ; i++){
-            MPI_Send(&(vecForRank[i]), 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-            MPI_Send(elements+stepGate, vecForRank[i]*3, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
-            stepGate += vecForRank[i] * 3;
+        if (rank != 0) {
+            timeReadData = MPI_Wtime();
+            MPI_Status status;
+            MPI_Recv(&nodeVecAmount, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
+            elements = (float *) malloc(sizeof(float) * nodeVecAmount * 3);
+            MPI_Recv(elements, nodeVecAmount * 3, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
+            timeReadData = MPI_Wtime() - timeReadData;
         }
-
-        nodeVecAmount = vecForRank[rank];
-        free(vecForRank);
-        timeReadData = MPI_Wtime() - timeReadData; // end of reading and spreading data
     }
-
-    if (rank != 0) {
-        timeReadData = MPI_Wtime();
-        MPI_Status status;
-        MPI_Recv(&nodeVecAmount, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
-        elements = (float *) malloc(sizeof(float) * nodeVecAmount * 3);
-        MPI_Recv(elements, nodeVecAmount * 3, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, &status);
-        timeReadData = MPI_Wtime() - timeReadData;
+    else {
+        MPI_File mpiFile;
+        MPI_Info mpiInfo;
+        MPI_File_open (MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL,
+                           &mpiFile);
+        MPI_File_close(&mpiFile);
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
