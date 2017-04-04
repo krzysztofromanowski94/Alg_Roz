@@ -3,6 +3,29 @@
 #include <math.h>
 #include "mpi.h"
 
+int *getVecAmount(int lineAmount, int size){
+    int *vecForRank = (int *) calloc(size, sizeof(int));
+    int vecLeft = lineAmount; //will use this value to recognise how many vectors are left
+    div_t tempDiv; //for counting left vectors
+    do {
+        tempDiv = div(vecLeft, size); //amount of vectors for each processor
+        for (int i = 0; i < size; i++) {
+            vecForRank[i] += tempDiv.quot;
+        }
+        vecLeft = tempDiv.rem; //update left vectors
+        if (tempDiv.rem > size)
+            vecLeft = tempDiv.rem;
+        else {
+            int ti = 0; //temporary iterator
+            while (vecLeft > 0) {
+                vecForRank[(ti++) % size]++;
+                vecLeft--; //add 1 to each node until no vectors left
+            }
+        }
+    } while (vecLeft > 0);
+    return vecForRank;
+}
+
 
 
 int main (int argc, char *argv[]) {
@@ -18,7 +41,7 @@ int main (int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    char filename[] = "../AR/v06.dat";
+    char filename[] = "../AR/v01.dat";
     option = atoi(argv[1]);
 
     if (option == 0) {
@@ -43,9 +66,9 @@ int main (int argc, char *argv[]) {
                 myFile.getline(line, 256);
                 int c = 0; //helps set current char to curVal
                 int vi = 0; //temporary vector counter. It resets itself every line
-		printf("\n");
+                printf("\n");
                 for (int i = 0; line[i] != 0; i++) { //go through the line while any chars left
-			printf("%i ", line[i]);
+                    printf("%i ", line[i]);
                     if (line[i] != 0 && line[i] != 32) { //if there are required characters
                         curVal[c++] = line[i];
                         if (line[i + 1] == 0 || line[i + 1] == 32) { //if next char in line is a whitespace
@@ -106,17 +129,71 @@ int main (int argc, char *argv[]) {
     }
     else {
 
-	std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
-	int filesize = in.tellg();
-	int linesize = 40;
-	printf("filesize: %i ; linesize: %i\n", filesize, filesize / linesize);
-	getchar();
+        std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+        int filesize = in.tellg();
+        int linesize = 40;
+        printf("filesize: %i ; linesize: %i\n", filesize, filesize / linesize);
 
+        int err;
         MPI_File mpiFile;
-        MPI_Info mpiInfo;
-        MPI_File_open (MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL,
-                           &mpiFile);
+        err = MPI_File_open( MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpiFile );
+        if (err) {
+            printf("Error opening file %s\n", filename);
+            MPI_Abort( MPI_COMM_WORLD, 911 );
+        }
+
+        int *vecAmount = getVecAmount(filesize/linesize, size);
+        char buf[vecAmount[rank] * linesize];
+        for (int i = 0 ; i < vecAmount[rank] * linesize ; i++){
+            buf[i] = 0;
+        }
+
+        int offset = 0;
+        for (int i = 0 ; i < rank ; i++) {
+            offset += vecAmount[i] * linesize;
+        }
+        printf("rank %i offset %i\n", rank, offset);
+
+        err = MPI_File_read_at(mpiFile, offset, buf, vecAmount[rank] * linesize , MPI_CHAR, MPI_STATUS_IGNORE);
+        if (err) {
+            printf("Error reading file %s\n", filename);
+            MPI_Abort( MPI_COMM_WORLD, 911 );
+        }
+
+
+        float *elements = (float*) malloc (sizeof(float) * vecAmount[rank] * 3);
+        printf("elements for rank %i : %i\n", rank, vecAmount[rank] * 3);
+
+        nodeVecAmount = vecAmount[rank];
+        int allElemIter = 0;
+        char curVal[] = {'\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'}; //current value
+        int c = 0; //helps set current char to curVal
+        int vi = 0; //temporary vector counter. It resets itself every line
+        printf("\n");
+        int i;
+        for (i = 0; i < nodeVecAmount * linesize; i++) { //go through the line while any chars left
+            if (buf[i] != 10 && buf[i] != 32) { //if there are required characters
+                curVal[c++] = buf[i];
+                if (buf[i + 1] == 10 || buf[i + 1] == 32 ) { //if next char in line is a whitespace
+                    elements[allElemIter++] = atof(curVal);
+                    c = 0; //reset current char iterator
+                    for (int j = 0; j < 8; j++) //reset current value to be clean for next reading
+                        curVal[j] = '\0';
+                }
+            }
+        }
+        printf("\ni: %i   allElemIter: %i\n", i, allElemIter);
+
+
+
+        //printf("\nerrors: %i\n", errs);
+        //MPI_File_close(&fh);
+
+        //free(elements);
         MPI_File_close(&mpiFile);
+        MPI_Finalize();
+        return 0;
+
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////
