@@ -43,7 +43,9 @@ int main (int argc, char *argv[]) {
                 myFile.getline(line, 256);
                 int c = 0; //helps set current char to curVal
                 int vi = 0; //temporary vector counter. It resets itself every line
+		printf("\n");
                 for (int i = 0; line[i] != 0; i++) { //go through the line while any chars left
+			printf("%i ", line[i]);
                     if (line[i] != 0 && line[i] != 32) { //if there are required characters
                         curVal[c++] = line[i];
                         if (line[i + 1] == 0 || line[i + 1] == 32) { //if next char in line is a whitespace
@@ -103,6 +105,13 @@ int main (int argc, char *argv[]) {
         }
     }
     else {
+
+	std::ifstream in(filename, std::ifstream::ate | std::ifstream::binary);
+	int filesize = in.tellg();
+	int linesize = 40;
+	printf("filesize: %i ; linesize: %i\n", filesize, filesize / linesize);
+	getchar();
+
         MPI_File mpiFile;
         MPI_Info mpiInfo;
         MPI_File_open (MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL,
