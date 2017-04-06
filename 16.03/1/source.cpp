@@ -87,25 +87,7 @@ int main (int argc, char *argv[]) {
             }
             myFile.close();
 
-            int *vecForRank = (int *) calloc(size, sizeof(int));
-            int vecLeft = lineAmount; //will use this value to recognise how many vectors are left
-            div_t tempDiv; //for counting left vectors
-            do {
-                tempDiv = div(vecLeft, size); //amount of vectors for each processor
-                for (int i = 0; i < size; i++) {
-                    vecForRank[i] += tempDiv.quot;
-                }
-                vecLeft = tempDiv.rem; //update left vectors
-                if (tempDiv.rem > size)
-                    vecLeft = tempDiv.rem;
-                else {
-                    int ti = 0; //temporary iterator
-                    while (vecLeft > 0) {
-                        vecForRank[(ti++) % size]++;
-                        vecLeft--; //add 1 to each node until no vectors left
-                    }
-                }
-            } while (vecLeft > 0);
+            int *vecForRank = getVecAmount(lineAmount, size);
 
             for (int i = 0; i < size; i++) {
                 printf("vectors for rank %i : %i\n", i, vecForRank[i]);
