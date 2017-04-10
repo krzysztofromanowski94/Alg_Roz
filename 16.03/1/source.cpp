@@ -189,7 +189,7 @@ int main (int argc, char *argv[]) {
         //printf("\nerrors: %i\n", errs);
         //MPI_File_close(&fh);
 
-        //free(elements);
+        free(elements);
         MPI_File_close(&mpiFile);
         MPI_Finalize();
         return 0;
