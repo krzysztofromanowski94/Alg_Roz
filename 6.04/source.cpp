@@ -2,6 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <math.h>
+#include <string.h>
 #include <mpi.h>
 
 typedef struct s_poly {
@@ -30,9 +31,7 @@ double evaluateAnalytic(S_polynomial polynomial,double l, double u){
     for (int i = 0 ; i < polynomial.size ; i++){
         retL += (pow(l, i+1) * polynomial.a[i]) / (i + 1);
         retB += (pow(u, i+1) * polynomial.a[i]) / (i + 1);
-        printf("powA: %f\tpowB: %f\n", pow(l, i+1), pow(u, i+1));
     }
-    printf("retA: %f ; retB: %f\n", retL, retB);
     return (retB - retL);
 }
 
@@ -80,7 +79,7 @@ int main(int argc, char *argv[]) {
         polynomial.size = info.degree + 1;
         printf("\n%s: ", str);
         polynomial.a = (double *) malloc(sizeof(double) * polynomial.size);
-        for (int i = info.degree; i >= 0; i--) {
+        for (int i = 0; i < polynomial.size; i++) {
             paramFile >> polynomial.a[i];
             printf("%f ", polynomial.a[i]);
         }
@@ -102,7 +101,7 @@ int main(int argc, char *argv[]) {
         MPI_Pack(&info.intervalL, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
         MPI_Pack(&info.intervalR, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
         MPI_Pack(&info.integration, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Bcast(buffer, position, MPI_PACKED, 0, MPI_COMM_WORLD);
+//        MPI_Bcast(buffer, position, MPI_PACKED, 0, MPI_COMM_WORLD);
     }
 
     MPI_Bcast(buffer, 300, MPI_PACKED, 0, MPI_COMM_WORLD);
