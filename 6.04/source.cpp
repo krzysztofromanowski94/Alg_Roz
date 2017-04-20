@@ -13,7 +13,7 @@ typedef struct s_poly {
 typedef struct s_info {
     int degree;
     double intervalL, intervalR;
-    double integration;
+    int integration;
 
 } S_info;
 
@@ -42,8 +42,10 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    char buffer[300];
+	/// use MPI_Pack_size
+    char *buffer = NULL;
     int position = 0;
+    int pack_size = 0;
     S_polynomial polynomial;
     S_info info;
 
@@ -91,38 +93,87 @@ int main(int argc, char *argv[]) {
         paramFile >> str;
         printf("%s: ", str);
         paramFile >> info.integration;
-        printf("%f: \n", info.integration);
+        printf("%i: \n", info.integration);
         paramFile.close();
 
+
+	int temp_pack_size = 0;
+	MPI_Pack_size(3, MPI_INT, MPI_COMM_WORLD, &temp_pack_size);
+	pack_size += temp_pack_size;
+	MPI_Pack_size(2, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
+	pack_size += temp_pack_size;
+	MPI_Pack_size(polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
+	pack_size += temp_pack_size;
+	
         /// pack variables
-        MPI_Pack(&polynomial.size, 1, MPI_INT, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Pack(polynomial.a, polynomial.size, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Pack(&info.degree, 1, MPI_INT, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Pack(&info.intervalL, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Pack(&info.intervalR, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
-        MPI_Pack(&info.integration, 1, MPI_DOUBLE, buffer, 1000, &position, MPI_COMM_WORLD);
-//        MPI_Bcast(buffer, position, MPI_PACKED, 0, MPI_COMM_WORLD);
+	buffer = (char*) malloc (sizeof(char) * pack_size);
+        MPI_Pack(&polynomial.size, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
+        MPI_Pack(polynomial.a, polynomial.size, MPI_DOUBLE, buffer, pack_size, &position, MPI_COMM_WORLD);
+        MPI_Pack(&info.degree, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
+        MPI_Pack(&info.intervalL, 1, MPI_DOUBLE, buffer, pack_size, &position, MPI_COMM_WORLD);
+        MPI_Pack(&info.intervalR, 1, MPI_DOUBLE, buffer, pack_size, &position, MPI_COMM_WORLD);
+        MPI_Pack(&info.integration, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
     }
 
-    MPI_Bcast(buffer, 300, MPI_PACKED, 0, MPI_COMM_WORLD);
+
+    MPI_Bcast(&pack_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (rank != 0)
+	buffer = (char*) malloc (sizeof(char) * pack_size);
+    MPI_Bcast(buffer, pack_size, MPI_PACKED, 0, MPI_COMM_WORLD);
 
     /// unpack variables
-    position = 0;
-    MPI_Unpack(buffer, 300, &position, &polynomial.size, 1, MPI_INT, MPI_COMM_WORLD);
-        polynomial.a = (double*)malloc(sizeof(double) * polynomial.size);
-    MPI_Unpack(buffer, 300, &position, polynomial.a, polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Unpack(buffer, 300, &position, &info.degree, 1, MPI_INT, MPI_COMM_WORLD);
-    MPI_Unpack(buffer, 300, &position, &info.intervalL, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Unpack(buffer, 300, &position, &info.intervalR, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Unpack(buffer, 300, &position, &info.integration, 1, MPI_DOUBLE, MPI_COMM_WORLD);
+    if (rank != 0){
+	position = 0;
+	MPI_Unpack(buffer, pack_size, &position, &polynomial.size, 1, MPI_INT, MPI_COMM_WORLD);
+            polynomial.a = (double*)malloc(sizeof(double) * polynomial.size);
+	MPI_Unpack(buffer, pack_size, &position, polynomial.a, polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD);
+	MPI_Unpack(buffer, pack_size, &position, &info.degree, 1, MPI_INT, MPI_COMM_WORLD);
+	MPI_Unpack(buffer, pack_size, &position, &info.intervalL, 1, MPI_DOUBLE, MPI_COMM_WORLD);
+	MPI_Unpack(buffer, pack_size, &position, &info.intervalR, 1, MPI_DOUBLE, MPI_COMM_WORLD);
+	MPI_Unpack(buffer, pack_size, &position, &info.integration, 1, MPI_INT, MPI_COMM_WORLD);
+    }
 
     if (rank == 0){
         //printf("%f: \n", evaluate(polynomial, 12));
-        printf("Eval analitic: %f \n", evaluateAnalytic(polynomial, info.intervalL, info.intervalR));
+        //printf("Eval analitic: %f \n", evaluateAnalytic(polynomial, info.intervalL, info.intervalR));
+	double length =  info.intervalR - info.intervalL;
+	printf("length: %f intervals: %i interval length: %f\n", length, info.integration, length / info.integration);
+	int *intervalForRank;
+	
     }
 
+    int *intervalForRank = (int*)malloc(sizeof(int) * size);
+    int quot = info.integration / size;
+    int rem = info.integration % size;
+    for (int i = 0 ; i < size ; i++)
+	intervalForRank[i] = quot;
+    for (int i = 0 ; rem > 0 ; i++){
+	intervalForRank[i]++;
+	rem--;
+    }
+
+    int l = 0;
+    int u = 0;
+
+    for (int i = 0 ; i < rank; i++){
+	l += intervalForRank[i];
+	//printf("rank %i\n", rank);
+    }
+
+    //printf("rank %i l: %i\n",rank,  l);
+    int lowRank = l, uppRank = 0;
+    for (int i = 0 ; i < rank + 1; i++){
+	uppRank += intervalForRank[i];
+    }
+    uppRank--;
+    printf("rank %i l: %i ; u: %i\n", rank, lowRank, uppRank);
+    
+    
 
 
+
+    free (polynomial.a);
+    free (intervalForRank);
     MPI_Finalize();
     return 0;
 
