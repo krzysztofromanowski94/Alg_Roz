@@ -17,22 +17,22 @@ typedef struct s_info {
 
 } S_info;
 
-double evaluate(S_polynomial polynomial,double x){
+double evaluate(S_polynomial polynomial, double x) {
     double ret = 0;
-    for (int i = 0 ; i < polynomial.size ; i++){
+    for (int i = 0; i < polynomial.size; i++) {
         ret += pow(x, i) * polynomial.a[i];
     }
     return ret;
 }
 
-double evaluateAnalytic(S_polynomial polynomial,double l, double u){
+double evaluateAnalytic(S_polynomial polynomial, double l, double u) {
     double retL = 0;
-    double retB = 0;
-    for (int i = 0 ; i < polynomial.size ; i++){
-        retL += (pow(l, i+1) * polynomial.a[i]) / (i + 1);
-        retB += (pow(u, i+1) * polynomial.a[i]) / (i + 1);
+    double retU = 0;
+    for (int i = 0; i < polynomial.size; i++) {
+        retL += (pow(l, i + 1) * polynomial.a[i]) / (i + 1);
+        retU += (pow(u, i + 1) * polynomial.a[i]) / (i + 1);
     }
-    return (retB - retL);
+    return (retU - retL);
 }
 
 int main(int argc, char *argv[]) {
@@ -42,19 +42,16 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-	/// use MPI_Pack_size
     char *buffer = NULL;
     int position = 0;
     int pack_size = 0;
     S_polynomial polynomial;
     S_info info;
 
-    //int degree,
 
     if (rank == 0) {
+        /// just some fancy lines to check whether arguments are right and file exists
         std::fstream paramFile;
-
-        /// check arguments
         if (argc != 2) {
             printf("Invalid amount of parameters (%i)\n", argc);
             MPI_Abort(MPI_COMM_WORLD, -1);
@@ -89,24 +86,25 @@ int main(int argc, char *argv[]) {
         printf("\n%s: ", str);
         paramFile >> info.intervalL;
         paramFile >> info.intervalR;
-        printf("%f: , %f: \n", info.intervalL, info.intervalR);
+        printf("%f ; %f \n", info.intervalL, info.intervalR);
         paramFile >> str;
         printf("%s: ", str);
         paramFile >> info.integration;
-        printf("%i: \n", info.integration);
+        printf("%i \n", info.integration);
         paramFile.close();
 
 
-	int temp_pack_size = 0;
-	MPI_Pack_size(3, MPI_INT, MPI_COMM_WORLD, &temp_pack_size);
-	pack_size += temp_pack_size;
-	MPI_Pack_size(2, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
-	pack_size += temp_pack_size;
-	MPI_Pack_size(polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
-	pack_size += temp_pack_size;
-	
+        /// check how big buffer is needed
+        int temp_pack_size = 0;
+        MPI_Pack_size(3, MPI_INT, MPI_COMM_WORLD, &temp_pack_size);
+        pack_size += temp_pack_size;
+        MPI_Pack_size(2, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
+        pack_size += temp_pack_size;
+        MPI_Pack_size(polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD, &temp_pack_size);
+        pack_size += temp_pack_size;
+
         /// pack variables
-	buffer = (char*) malloc (sizeof(char) * pack_size);
+        buffer = (char *) malloc(sizeof(char) * pack_size);
         MPI_Pack(&polynomial.size, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
         MPI_Pack(polynomial.a, polynomial.size, MPI_DOUBLE, buffer, pack_size, &position, MPI_COMM_WORLD);
         MPI_Pack(&info.degree, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
@@ -115,66 +113,67 @@ int main(int argc, char *argv[]) {
         MPI_Pack(&info.integration, 1, MPI_INT, buffer, pack_size, &position, MPI_COMM_WORLD);
     }
 
-
+    /// broadcast size of data and data
     MPI_Bcast(&pack_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     if (rank != 0)
-	buffer = (char*) malloc (sizeof(char) * pack_size);
+        buffer = (char *) malloc(sizeof(char) * pack_size);
     MPI_Bcast(buffer, pack_size, MPI_PACKED, 0, MPI_COMM_WORLD);
 
     /// unpack variables
-    if (rank != 0){
-	position = 0;
-	MPI_Unpack(buffer, pack_size, &position, &polynomial.size, 1, MPI_INT, MPI_COMM_WORLD);
-            polynomial.a = (double*)malloc(sizeof(double) * polynomial.size);
-	MPI_Unpack(buffer, pack_size, &position, polynomial.a, polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD);
-	MPI_Unpack(buffer, pack_size, &position, &info.degree, 1, MPI_INT, MPI_COMM_WORLD);
-	MPI_Unpack(buffer, pack_size, &position, &info.intervalL, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-	MPI_Unpack(buffer, pack_size, &position, &info.intervalR, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-	MPI_Unpack(buffer, pack_size, &position, &info.integration, 1, MPI_INT, MPI_COMM_WORLD);
+    if (rank != 0) {
+        position = 0;
+        MPI_Unpack(buffer, pack_size, &position, &polynomial.size, 1, MPI_INT, MPI_COMM_WORLD);
+        polynomial.a = (double *) malloc(sizeof(double) * polynomial.size);
+        MPI_Unpack(buffer, pack_size, &position, polynomial.a, polynomial.size, MPI_DOUBLE, MPI_COMM_WORLD);
+        MPI_Unpack(buffer, pack_size, &position, &info.degree, 1, MPI_INT, MPI_COMM_WORLD);
+        MPI_Unpack(buffer, pack_size, &position, &info.intervalL, 1, MPI_DOUBLE, MPI_COMM_WORLD);
+        MPI_Unpack(buffer, pack_size, &position, &info.intervalR, 1, MPI_DOUBLE, MPI_COMM_WORLD);
+        MPI_Unpack(buffer, pack_size, &position, &info.integration, 1, MPI_INT, MPI_COMM_WORLD);
     }
 
-    if (rank == 0){
-        //printf("%f: \n", evaluate(polynomial, 12));
-        //printf("Eval analitic: %f \n", evaluateAnalytic(polynomial, info.intervalL, info.intervalR));
-	double length =  info.intervalR - info.intervalL;
-	printf("length: %f intervals: %i interval length: %f\n", length, info.integration, length / info.integration);
-	int *intervalForRank;
-	
-    }
-
-    int *intervalForRank = (int*)malloc(sizeof(int) * size);
+    /// indexes for ranks
+    int lowRank = 0;
+    int uppRank = 0;
+    int *indexesForRank = (int *) malloc(sizeof(int) * size);
     int quot = info.integration / size;
     int rem = info.integration % size;
-    for (int i = 0 ; i < size ; i++)
-	intervalForRank[i] = quot;
-    for (int i = 0 ; rem > 0 ; i++){
-	intervalForRank[i]++;
-	rem--;
+    for (int i = 0; i < size; i++)
+        indexesForRank[i] = quot;
+    for (int i = 0; rem > 0; i++) {
+        indexesForRank[i]++;
+        rem--;
+    }
+    for (int i = 0; i < rank; i++) {
+        lowRank += indexesForRank[i];
+    }
+    for (int i = 0; i < rank + 1; i++) {
+        uppRank += indexesForRank[i];
     }
 
-    int l = 0;
-    int u = 0;
-
-    for (int i = 0 ; i < rank; i++){
-	l += intervalForRank[i];
-	//printf("rank %i\n", rank);
+    /// evaluate partial integral on every node
+    double partialIntegral = 0;
+    double intervalLength = (info.intervalR - info.intervalL) / info.integration;
+    for (int i = lowRank; i < uppRank; i++) {
+        double curX = info.intervalL + i * intervalLength;
+        double t = evaluate(polynomial, curX) + evaluate(polynomial, curX + intervalLength);
+        partialIntegral += (t / 2.) * intervalLength;
     }
 
-    //printf("rank %i l: %i\n",rank,  l);
-    int lowRank = l, uppRank = 0;
-    for (int i = 0 ; i < rank + 1; i++){
-	uppRank += intervalForRank[i];
+
+    /// reduce and show results
+    double integral = 0;
+    MPI_Reduce(&partialIntegral, &integral, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (rank == 0) {
+        printf("numerical\t= %.18f\n", integral);
+        printf("analytical\t= %.18f\n", evaluateAnalytic(polynomial, info.intervalL, info.intervalR));
     }
-    uppRank--;
-    printf("rank %i l: %i ; u: %i\n", rank, lowRank, uppRank);
-    
-    
 
 
-
-    free (polynomial.a);
-    free (intervalForRank);
+    if (buffer != NULL) {
+        free(buffer);
+    }
+    free(polynomial.a);
+    free(indexesForRank);
     MPI_Finalize();
     return 0;
-
 }
